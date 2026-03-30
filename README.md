@@ -1,6 +1,6 @@
 # ProjectPatty
 
-My portfolio site that routes to published projects.
+My portfolio site that routes to published projects. 3D environment where you can control a character and run into portals that route to my published projects.
 
 ## Local Setup
 
