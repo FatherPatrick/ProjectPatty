@@ -1,0 +1,12 @@
+{
+  "name": "project-patty",
+  "private": true,
+  "scripts": {
+    "install:app": "npm install --prefix portfolio-app",
+    "start": "npm --prefix portfolio-app run start",
+    "test": "npm --prefix portfolio-app run test",
+    "build": "npm --prefix portfolio-app run build",
+    "build:vercel": "npm --prefix portfolio-app run build:vercel",
+    "vercel-build": "npm run build:vercel"
+  }
+}
