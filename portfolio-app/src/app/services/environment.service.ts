@@ -30,8 +30,7 @@ export class EnvironmentService {
       const scale = 0.3 + Math.random() * 0.8;
 
       const rock = MeshBuilder.CreateSphere('rock' + i, { diameter: scale, segments: 6 }, scene);
-      const terrainHeight = this.getTerrainHeightAt(x, z);
-      rock.position.set(x, terrainHeight + scale * 0.5, z);
+      rock.position.set(x, scale * 0.5, z);
 
       rock.material = rockMaterial;
       rock.scaling.set(0.8 + Math.random() * 0.4, 0.6 + Math.random() * 0.5, 0.8 + Math.random() * 0.4);
