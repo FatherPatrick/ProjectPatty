@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build:vercel",
-  "outputDirectory": "dist/portfolio-app",
+  "outputDirectory": "dist/portfolio-app/browser",
   "rewrites": [
     {
       "source": "/(.*)",
