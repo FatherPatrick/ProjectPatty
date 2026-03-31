@@ -30,6 +30,10 @@ export class InputService {
     return { forward, right };
   }
 
+  public isJumpPressed(): boolean {
+    return this.pressedKeys.has(' ');
+  }
+
   private setupEventListeners(): void {
     window.addEventListener('keydown', this.onKeyDown.bind(this));
     window.addEventListener('keyup', this.onKeyUp.bind(this));
@@ -41,7 +45,13 @@ export class InputService {
   }
 
   private onKeyDown(event: KeyboardEvent): void {
-    this.pressedKeys.add(event.key.toLowerCase());
+    const key = event.key.toLowerCase();
+    this.pressedKeys.add(key);
+    
+    // Prevent default scroll behavior for spacebar and arrow keys
+    if (key === ' ' || ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+      event.preventDefault();
+    }
   }
 
   private onKeyUp(event: KeyboardEvent): void {

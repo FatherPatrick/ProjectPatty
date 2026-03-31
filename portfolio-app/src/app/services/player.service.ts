@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Color3, DynamicTexture, Mesh, MeshBuilder, Scene, StandardMaterial, Vector3 } from '@babylonjs/core';
+import { Color3, DynamicTexture, Mesh, MeshBuilder, Scene, StandardMaterial, Vector3, Matrix } from '@babylonjs/core';
 
 interface PlayerAnimationState {
   leftArm: Mesh;
@@ -7,6 +7,12 @@ interface PlayerAnimationState {
   leftLeg: Mesh;
   rightLeg: Mesh;
   phase: number;
+  velocityX: number;
+  velocityY: number;
+  velocityZ: number;
+  jumpVelocityZ: number;
+  isGrounded: boolean;
+  lastJumpTime: number;
 }
 
 @Injectable({
@@ -18,6 +24,11 @@ export class PlayerService {
   private readonly baseArmRotationX = Math.PI;
   private readonly armSwingAmount = 0.8;
   private readonly legSwingAmount = 1.0;
+  private readonly gravity = 0.015;
+  private readonly jumpForce = 0.25;
+  private readonly jumpForwardVelocity = 0.08;
+  private readonly groundHeight = 0.3;
+  private readonly jumpCooldown = 0.3;
 
   public createPlayer(scene: Scene): Mesh {
     const player = this.createStickFigure(scene);
@@ -27,6 +38,9 @@ export class PlayerService {
 
   public updatePlayerMovement(player: Mesh, forward: number, right: number): void {
     const isMoving = !(forward === 0 && right === 0);
+    const state = this.getAnimationState(player);
+
+    if (!state) return;
 
     if (isMoving) {
       const forwardDir = new Vector3(0, 0, -1);
@@ -37,9 +51,45 @@ export class PlayerService {
 
       player.position.addInPlace(direction.scale(this.speed));
       player.rotation.y = Math.atan2(direction.x, direction.z);
+
+      // Track actual applied velocity
+      state.velocityX = direction.x * this.speed;
+      state.velocityZ = direction.z * this.speed;
+    } else {
+      state.velocityX = 0;
+      state.velocityZ = 0;
+    }
+
+    // Apply jump velocity (decays each frame)
+    if (Math.abs(state.jumpVelocityZ) > 0.001) {
+      const forwardDir = new Vector3(0, 0, 1);
+      const rotationMatrix = Matrix.RotationY(player.rotation.y);
+      const rotatedForward = Vector3.TransformCoordinates(forwardDir, rotationMatrix);
+      player.position.addInPlace(rotatedForward.scale(state.jumpVelocityZ));
+      state.jumpVelocityZ *= 0.95; // Decay jump velocity
+    } else {
+      state.jumpVelocityZ = 0;
     }
 
     this.updateRunAnimation(player, isMoving);
+    this.applyGravity(player);
+  }
+
+  public handleJumpInput(player: Mesh, jumpPressed: boolean, forward: number = 0, right: number = 0): void {
+    const state = this.getAnimationState(player);
+    if (!state || !jumpPressed) {
+      return;
+    }
+
+    const isMoving = !(forward === 0 && right === 0);
+    const currentTime = performance.now() / 1000;
+    if (state.isGrounded && currentTime - state.lastJumpTime >= this.jumpCooldown) {
+      state.velocityY = this.jumpForce;
+      // Only apply forward velocity from jump if the player is moving
+      state.jumpVelocityZ = isMoving ? this.jumpForwardVelocity : 0;
+      state.isGrounded = false;
+      state.lastJumpTime = currentTime;
+    }
   }
 
   private createStickFigure(scene: Scene): Mesh {
@@ -90,6 +140,12 @@ export class PlayerService {
         leftLeg,
         rightLeg,
         phase: 0,
+        velocityX: 0,
+        velocityY: 0,
+        velocityZ: 0,
+        jumpVelocityZ: 0,
+        isGrounded: true,
+        lastJumpTime: 0,
       } as PlayerAnimationState,
     };
 
@@ -160,5 +216,33 @@ export class PlayerService {
 
   private lerp(start: number, end: number, amount: number): number {
     return start + (end - start) * amount;
+  }
+
+  private applyGravity(player: Mesh): void {
+    const state = this.getAnimationState(player);
+    if (!state) {
+      return;
+    }
+
+    // Apply gravity
+    state.velocityY -= this.gravity;
+
+    // Update position
+    player.position.y += state.velocityY;
+
+    // Check if grounded
+    if (player.position.y <= this.groundHeight) {
+      player.position.y = this.groundHeight;
+      state.velocityY = 0;
+      state.isGrounded = true;
+    }
+  }
+
+  public getPlayerVelocity(player: Mesh): { x: number; y: number; z: number } {
+    const state = this.getAnimationState(player);
+    if (!state) {
+      return { x: 0, y: 0, z: 0 };
+    }
+    return { x: state.velocityX, y: state.velocityY, z: state.velocityZ + state.jumpVelocityZ };
   }
 }

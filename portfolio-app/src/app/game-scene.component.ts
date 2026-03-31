@@ -26,6 +26,7 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
 
   public pendingPortal: { label: string; url: string } | null = null;
   public debugPosition = { x: 0, y: 0, z: 0 };
+  public debugVelocity = { x: 0, y: 0, z: 0 };
 
   constructor(
     private readonly ngZone: NgZone,
@@ -71,10 +72,13 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
     this.sceneService.startRenderLoop(this.ngZone, () => {
       if (this.player) {
         const { forward, right } = this.inputService.getMovementInput();
+        const jumpPressed = this.inputService.isJumpPressed();
+        
         this.playerService.updatePlayerMovement(this.player, forward, right);
+        this.playerService.handleJumpInput(this.player, jumpPressed, forward, right);
+        
         this.player.position.x = this.clamp(this.player.position.x, this.routeBounds.minX, this.routeBounds.maxX);
         this.player.position.z = this.clamp(this.player.position.z, this.routeBounds.minZ, this.routeBounds.maxZ);
-        this.player.position.y = 0.3;
 
         this.updateDebugPosition(this.player);
 
@@ -132,6 +136,12 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
       x: Number(player.position.x.toFixed(2)),
       y: Number(player.position.y.toFixed(2)),
       z: Number(player.position.z.toFixed(2)),
+    };
+    const velocity = this.playerService.getPlayerVelocity(player);
+    this.debugVelocity = {
+      x: Number(velocity.x.toFixed(3)),
+      y: Number(velocity.y.toFixed(3)),
+      z: Number(velocity.z.toFixed(3)),
     };
     this.cdr.detectChanges();
   }
