@@ -20,7 +20,7 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
   private player?: Mesh;
   private portals: any[] = [];
   private lastTouchedPortal: any = null;
-  private routeBounds = { minX: -6, maxX: 6, minZ: -55, maxZ: 55 };
+  private routeBounds = { minX: -6, maxX: 16, minZ: -55, maxZ: 55 };
   private readonly debugRefreshMs = 100;
   private lastDebugUpdateAt = 0;
 
@@ -47,6 +47,7 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
     this.environmentService.setSkyColor(scene);
     this.environmentService.createTerrain(scene);
     this.environmentService.createRocks(scene);
+    this.environmentService.createSidePathWithSign(scene);
 
     const portalSpawns: PortalSpawn[] = this.portalService.getPortalSpawns();
     this.environmentService.createLinearRoute(
@@ -57,7 +58,7 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
     const routeZBounds = this.portalService.getRouteBounds();
     this.routeBounds = {
       minX: -6,
-      maxX: 6,
+      maxX: 16,
       minZ: routeZBounds.minZ,
       maxZ: routeZBounds.maxZ,
     };
