@@ -37,6 +37,35 @@ export class EnvironmentService {
     }
   }
 
+  public createLinearRoute(scene: Scene, portalSpawns: Vector3[]): void {
+    if (portalSpawns.length === 0) {
+      return;
+    }
+
+    const zValues = portalSpawns.map((spawn) => spawn.z);
+    const minZ = Math.min(...zValues) - 8;
+    const maxZ = Math.max(...zValues) + 8;
+    const routeLength = maxZ - minZ;
+    const routeCenterZ = (maxZ + minZ) * 0.5;
+
+    const route = MeshBuilder.CreateGround('linearRoute', { width: 14, height: routeLength, subdivisions: 1 }, scene);
+    route.position.set(0, 0.03, routeCenterZ);
+
+    const routeMaterial = new StandardMaterial('routeMat', scene);
+    routeMaterial.diffuseColor = new Color3(0.2, 0.3, 0.2);
+    routeMaterial.specularColor = new Color3(0.05, 0.05, 0.05);
+    route.material = routeMaterial;
+
+    const markerMaterial = new StandardMaterial('markerMat', scene);
+    markerMaterial.diffuseColor = new Color3(0.8, 0.85, 0.45);
+
+    portalSpawns.forEach((spawn, index) => {
+      const marker = MeshBuilder.CreateCylinder(`routeMarker${index}`, { diameter: 1.8, height: 0.18, tessellation: 12 }, scene);
+      marker.position.set(spawn.x, 0.1, spawn.z);
+      marker.material = markerMaterial;
+    });
+  }
+
   public setSkyColor(scene: Scene): void {
     scene.clearColor.set(0.5, 0.7, 0.95, 1);
   }

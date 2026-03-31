@@ -4,7 +4,7 @@ import { Mesh } from '@babylonjs/core';
 import { EnvironmentService } from './services/environment.service';
 import { InputService } from './services/input.service';
 import { PlayerService } from './services/player.service';
-import { PortalService } from './services/portal.service';
+import { PortalService, PortalSpawn } from './services/portal.service';
 import { SceneService } from './services/scene.service';
 
 @Component({
@@ -20,8 +20,12 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
   private player?: Mesh;
   private portals: any[] = [];
   private lastTouchedPortal: any = null;
+  private routeBounds = { minX: -6, maxX: 6, minZ: -55, maxZ: 55 };
+  private readonly debugRefreshMs = 100;
+  private lastDebugUpdateAt = 0;
 
   public pendingPortal: { label: string; url: string } | null = null;
+  public debugPosition = { x: 0, y: 0, z: 0 };
 
   constructor(
     private readonly ngZone: NgZone,
@@ -38,21 +42,40 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
 
     this.sceneService.initializeEngine(canvas);
     const scene = this.sceneService.createScene();
-    const camera = this.sceneService.setupCamera(canvas);
+    this.sceneService.setupCamera(canvas);
 
     this.environmentService.setSkyColor(scene);
     this.environmentService.createTerrain(scene);
     this.environmentService.createRocks(scene);
 
+    const portalSpawns: PortalSpawn[] = this.portalService.getPortalSpawns();
+    this.environmentService.createLinearRoute(
+      scene,
+      portalSpawns.map((spawn) => spawn.position)
+    );
+
+    const routeZBounds = this.portalService.getRouteBounds();
+    this.routeBounds = {
+      minX: -6,
+      maxX: 6,
+      minZ: routeZBounds.minZ,
+      maxZ: routeZBounds.maxZ,
+    };
+
     this.portals = this.portalService.createPortals(scene);
 
     this.player = this.playerService.createPlayer(scene);
+    this.updateDebugPosition(this.player, true);
 
     this.sceneService.startRenderLoop(this.ngZone, () => {
       if (this.player) {
         const { forward, right } = this.inputService.getMovementInput();
         this.playerService.updatePlayerMovement(this.player, forward, right);
+        this.player.position.x = this.clamp(this.player.position.x, this.routeBounds.minX, this.routeBounds.maxX);
+        this.player.position.z = this.clamp(this.player.position.z, this.routeBounds.minZ, this.routeBounds.maxZ);
         this.player.position.y = 0.3;
+
+        this.updateDebugPosition(this.player);
 
         this.sceneService.updateCameraPosition(this.player);
 
@@ -92,4 +115,23 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
   private readonly onResize = (): void => {
     this.sceneService.handleResize();
   };
+
+  private clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  private updateDebugPosition(player: Mesh, force: boolean = false): void {
+    const now = performance.now();
+    if (!force && now - this.lastDebugUpdateAt < this.debugRefreshMs) {
+      return;
+    }
+
+    this.lastDebugUpdateAt = now;
+    this.debugPosition = {
+      x: Number(player.position.x.toFixed(2)),
+      y: Number(player.position.y.toFixed(2)),
+      z: Number(player.position.z.toFixed(2)),
+    };
+    this.cdr.detectChanges();
+  }
 }

@@ -31,6 +31,33 @@
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
+.debug-modal {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 2;
+  min-width: 130px;
+  color: #f1f5f9;
+  background: rgb(15 23 42 / 0.8);
+  border: 1px solid rgb(148 163 184 / 0.3);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  backdrop-filter: blur(2px);
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.debug-modal h2 {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.debug-modal p {
+  margin: 0.15rem 0;
+  font-size: 0.85rem;
+}
+
 .hud h1 {
   margin: 0 0 0.35rem;
   font-size: 1rem;

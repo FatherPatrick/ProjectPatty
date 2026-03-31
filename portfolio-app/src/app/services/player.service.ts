@@ -9,7 +9,7 @@ export class PlayerService {
 
   public createPlayer(scene: Scene): Mesh {
     const player = this.createStickFigure(scene);
-    player.position = new Vector3(0, 0, 0);
+    player.position = new Vector3(0, 0, 50);
     return player;
   }
 

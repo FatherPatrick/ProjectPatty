@@ -7,6 +7,13 @@
     <p>Camera: Mouse Drag + Scroll</p>
   </aside>
 
+  <aside class="debug-modal">
+    <h2>Debug</h2>
+    <p>X: {{ debugPosition.x }}</p>
+    <p>Y: {{ debugPosition.y }}</p>
+    <p>Z: {{ debugPosition.z }}</p>
+  </aside>
+
   @if (pendingPortal) {
     <div class="modal-backdrop" (click)="dismissPortal()">
       <div class="modal" (click)="$event.stopPropagation()">
