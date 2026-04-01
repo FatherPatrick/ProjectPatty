@@ -7,6 +7,42 @@ import { RouteTile } from './portal.service';
   providedIn: 'root'
 })
 export class EnvironmentService {
+  public createEndMarker(scene: Scene, lastTile: RouteTile, tileSize: number): void {
+    const forward = this.directionVector(lastTile.travelDirection);
+    const signPosition = lastTile.position.add(forward.scale(tileSize * 0.55));
+
+    const post = MeshBuilder.CreateCylinder('routeEndPost', { height: 1.8, diameter: 0.14, tessellation: 10 }, scene);
+    post.position.set(signPosition.x, 0.9, signPosition.z);
+    const postMaterial = new StandardMaterial('routeEndPostMat', scene);
+    postMaterial.diffuseColor = new Color3(0.28, 0.21, 0.12);
+    post.material = postMaterial;
+
+    const board = MeshBuilder.CreatePlane('routeEndBoard', { width: 2.6, height: 1.1 }, scene);
+    board.position.set(signPosition.x, 2.0, signPosition.z);
+    board.billboardMode = Mesh.BILLBOARDMODE_Y;
+
+    const texture = new DynamicTexture('routeEndTexture', { width: 1024, height: 420 }, scene, true);
+    const ctx = texture.getContext() as CanvasRenderingContext2D;
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, 1024, 420);
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 18;
+    ctx.strokeRect(10, 10, 1004, 400);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 170px Segoe UI';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('THE END', 512, 215);
+    texture.update();
+
+    const boardMaterial = new StandardMaterial('routeEndBoardMat', scene);
+    boardMaterial.diffuseTexture = texture;
+    boardMaterial.emissiveTexture = texture;
+    boardMaterial.disableLighting = true;
+    boardMaterial.backFaceCulling = false;
+    board.material = boardMaterial;
+  }
+
   public createTileRoute(scene: Scene, tiles: RouteTile[], tileSize: number): void {
     if (tiles.length === 0) {
       return;
@@ -15,6 +51,8 @@ export class EnvironmentService {
     // Slight overlap avoids tiny seams between adjacent tiles.
     const connectedTileSize = tileSize * 1.04;
     const laneMarkerWidth = 0.3;
+
+    this.createPathBaseGround(scene, tiles, connectedTileSize);
 
     const tileMaterial = new StandardMaterial('tileRouteMat', scene);
     tileMaterial.diffuseColor = new Color3(0.24, 0.3, 0.24);
@@ -37,6 +75,29 @@ export class EnvironmentService {
 
       this.createTileLaneMarker(scene, tile, connectedTileSize, markerMaterial, laneMarkerWidth);
     });
+  }
+
+  private createPathBaseGround(scene: Scene, tiles: RouteTile[], tileSize: number): void {
+    const padding = tileSize * 1.2;
+    const xValues = tiles.map((tile) => tile.position.x);
+    const zValues = tiles.map((tile) => tile.position.z);
+    const minX = Math.min(...xValues) - padding;
+    const maxX = Math.max(...xValues) + padding;
+    const minZ = Math.min(...zValues) - padding;
+    const maxZ = Math.max(...zValues) + padding;
+
+    const width = maxX - minX;
+    const height = maxZ - minZ;
+    const centerX = (minX + maxX) * 0.5;
+    const centerZ = (minZ + maxZ) * 0.5;
+
+    const pathBase = MeshBuilder.CreateGround('routePathBaseGround', { width, height, subdivisions: 1 }, scene);
+    pathBase.position.set(centerX, 0.02, centerZ);
+
+    const pathBaseMaterial = new StandardMaterial('routePathBaseMat', scene);
+    pathBaseMaterial.diffuseColor = new Color3(0.34, 0.6, 0.25);
+    pathBaseMaterial.specularColor = new Color3(0.05, 0.05, 0.05);
+    pathBase.material = pathBaseMaterial;
   }
 
   private createTileLaneMarker(

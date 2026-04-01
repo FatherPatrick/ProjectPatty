@@ -59,17 +59,22 @@ export class PortalService {
     const tiles: RouteTile[] = [];
     let direction: RouteDirection = 0;
     let currentPosition = startPosition.clone();
+    let previousTileType: TileType | undefined;
     const occupiedCells = new Set<string>();
 
     occupiedCells.add(this.gridKey(currentPosition, tileSize));
 
     for (let i = 0; i < clampedCount; i++) {
-      const tileTypeOptions = this.getTileOptions(i);
+      const tileTypeOptions = this.getTileOptions(i, previousTileType);
       const selectedType = tileTypeOptions.find((option) => {
         const candidateDirection = this.rotateDirection(direction, option);
+        if (this.isPositiveZDirection(candidateDirection)) {
+          return false;
+        }
+
         const candidateNext = currentPosition.add(this.directionToStep(candidateDirection, tileSize));
         return !occupiedCells.has(this.gridKey(candidateNext, tileSize));
-      }) ?? 'straight';
+      }) ?? tileTypeOptions.find((option) => !this.isPositiveZDirection(this.rotateDirection(direction, option))) ?? 'left';
 
       const outgoingDirection = this.rotateDirection(direction, selectedType);
 
@@ -83,6 +88,7 @@ export class PortalService {
       });
 
       direction = outgoingDirection;
+      previousTileType = selectedType;
       const step = this.directionToStep(direction, tileSize);
       currentPosition = currentPosition.add(step);
       occupiedCells.add(this.gridKey(currentPosition, tileSize));
@@ -373,21 +379,33 @@ export class PortalService {
     return Math.max(min, Math.min(max, value));
   }
 
-  private getTileOptions(index: number): TileType[] {
+  private getTileOptions(index: number, previousTileType?: TileType): TileType[] {
+    const removeConsecutiveSameTurn = (options: TileType[]): TileType[] => {
+      if (previousTileType === 'left') {
+        return options.filter((option) => option !== 'left');
+      }
+
+      if (previousTileType === 'right') {
+        return options.filter((option) => option !== 'right');
+      }
+
+      return options;
+    };
+
     if (index < 3) {
-      return ['straight', 'left', 'right'];
+      return removeConsecutiveSameTurn(['straight', 'left', 'right']);
     }
 
     const roll = Math.random();
     if (roll < 0.58) {
-      return ['straight', 'left', 'right'];
+      return removeConsecutiveSameTurn(['straight', 'left', 'right']);
     }
 
     if (roll < 0.79) {
-      return ['left', 'straight', 'right'];
+      return removeConsecutiveSameTurn(['left', 'straight', 'right']);
     }
 
-    return ['right', 'straight', 'left'];
+    return removeConsecutiveSameTurn(['right', 'straight', 'left']);
   }
 
   private rotateDirection(direction: RouteDirection, tileType: TileType): RouteDirection {
@@ -446,6 +464,10 @@ export class PortalService {
       default:
         return new Vector3(0, 0, -1);
     }
+  }
+
+  private isPositiveZDirection(direction: RouteDirection): boolean {
+    return direction === 2;
   }
 
   public dispose(): void {
