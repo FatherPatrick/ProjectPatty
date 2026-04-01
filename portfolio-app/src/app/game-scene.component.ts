@@ -4,7 +4,7 @@ import { Mesh } from '@babylonjs/core';
 import { EnvironmentService } from './services/environment.service';
 import { InputService } from './services/input.service';
 import { PlayerService } from './services/player.service';
-import { PortalService, PortalSpawn } from './services/portal.service';
+import { PortalService } from './services/portal.service';
 import { SceneService } from './services/scene.service';
 
 @Component({
@@ -21,6 +21,9 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
   private portals: any[] = [];
   private lastTouchedPortal: any = null;
   private routeBounds = { minX: -6, maxX: 16, minZ: -55, maxZ: 55 };
+  private readonly tileSize = 8;
+  private readonly tileCount = 30;
+  private readonly portalEveryNTiles = 4;
   private readonly debugRefreshMs = 100;
   private lastDebugUpdateAt = 0;
 
@@ -50,19 +53,10 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
     this.environmentService.createRocks(scene);
     this.environmentService.createSidePathWithSign(scene);
 
-    const portalSpawns: PortalSpawn[] = this.portalService.getPortalSpawns();
-    this.environmentService.createLinearRoute(
-      scene,
-      portalSpawns.map((spawn) => spawn.position)
-    );
-
-    const routeZBounds = this.portalService.getRouteBounds();
-    this.routeBounds = {
-      minX: -6,
-      maxX: 16,
-      minZ: routeZBounds.minZ,
-      maxZ: routeZBounds.maxZ,
-    };
+    const routeTiles = this.portalService.generateRouteTiles(this.tileCount, this.tileSize);
+    this.environmentService.createTileRoute(scene, routeTiles, this.tileSize);
+    this.portalService.buildPortalSpawnsFromTiles(routeTiles, this.portalEveryNTiles);
+    this.routeBounds = this.portalService.getRouteBoundsFromTiles(routeTiles, this.tileSize);
 
     this.portals = this.portalService.createPortals(scene);
 

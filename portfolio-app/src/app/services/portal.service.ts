@@ -1,10 +1,30 @@
 import { Injectable } from '@angular/core';
 import { AbstractMesh, Color3, DynamicTexture, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, Vector3 } from '@babylonjs/core';
 
+export type TileType = 'straight' | 'left' | 'right';
+
+type RouteDirection = 0 | 1 | 2 | 3;
+
+interface PortalTemplate {
+  url: string;
+  label: string;
+  excerpt: string;
+  color: Color3;
+}
+
 export interface Portal {
   mesh: Mesh;
   url: string;
   label: string;
+}
+
+export interface RouteTile {
+  index: number;
+  type: TileType;
+  position: Vector3;
+  rotationY: number;
+  incomingDirection: RouteDirection;
+  travelDirection: RouteDirection;
 }
 
 export interface PortalSpawn {
@@ -24,14 +44,78 @@ export class PortalService {
   private triggerIndicators: Mesh[] = [];
   private glowLayer?: GlowLayer;
   private readonly portalTriggerRadius = 3;
-  private readonly portalSpawns: PortalSpawn[] = [
-    { position: new Vector3(-5.5, 0, 46), url: 'https://www.linkedin.com/in/patty-park/', label: 'LinkedIn', excerpt: 'Patrick\'s LinkedIn profile.', color: new Color3(0.4, 0.9, 1) },
-    { position: new Vector3(5.5, 0, 28), url: 'https://github.com/FatherPatrick', label: 'GitHub', excerpt: 'Patrick\'s GitHub profile.', color: new Color3(0.2, 0.6, 1) },
-    { position: new Vector3(-5.5, 0, 10), url: 'https://tark-provision-calc.vercel.app/', label: 'Provision Calculator', excerpt: 'First side project. Frontend used to calculate most cost efficient way to replenish hunger and thirst in Tarkov.', color: new Color3(0.2, 1, 0.5) },
-    { position: new Vector3(5.5, 0, -8), url: 'https://github.com/FatherPatrick/projectBinx', label: 'Project Binx', excerpt: 'App much like YikYak, but based on Polls.', color: new Color3(0, 0.5, 1) },
-    { position: new Vector3(-5.5, 0, -26), url: 'https://tarkovle.vercel.app/', label: 'Tarkovle', excerpt: 'Wordle style game, but for Tarkov', color: new Color3(1, 0.5, 0.2) },
-    { position: new Vector3(5.5, 0, -44), url: 'https://tarkovle.vercel.app/contact', label: 'Contact', excerpt: 'Reach out for collaboration or consulting.', color: new Color3(1, 0.2, 0.8) },
+  private portalSpawns: PortalSpawn[] = [];
+  private readonly portalTemplates: PortalTemplate[] = [
+    { url: 'https://www.linkedin.com/in/patty-park/', label: 'LinkedIn', excerpt: 'Patrick\'s LinkedIn profile.', color: new Color3(0.4, 0.9, 1) },
+    { url: 'https://github.com/FatherPatrick', label: 'GitHub', excerpt: 'Patrick\'s GitHub profile.', color: new Color3(0.2, 0.6, 1) },
+    { url: 'https://tark-provision-calc.vercel.app/', label: 'Provision Calculator', excerpt: 'First side project. Frontend used to calculate most cost efficient way to replenish hunger and thirst in Tarkov.', color: new Color3(0.2, 1, 0.5) },
+    { url: 'https://github.com/FatherPatrick/projectBinx', label: 'Project Binx', excerpt: 'App much like YikYak, but based on Polls.', color: new Color3(0, 0.5, 1) },
+    { url: 'https://tarkovle.vercel.app/', label: 'Tarkovle', excerpt: 'Wordle style game, but for Tarkov', color: new Color3(1, 0.5, 0.2) },
+    { url: 'https://tarkovle.vercel.app/contact', label: 'Contact', excerpt: 'Reach out for collaboration or consulting.', color: new Color3(1, 0.2, 0.8) },
   ];
+
+  public generateRouteTiles(tileCount: number, tileSize: number, startPosition: Vector3 = new Vector3(0, 0, 50)): RouteTile[] {
+    const clampedCount = Math.max(8, tileCount);
+    const tiles: RouteTile[] = [];
+    let direction: RouteDirection = 0;
+    let currentPosition = startPosition.clone();
+    const occupiedCells = new Set<string>();
+
+    occupiedCells.add(this.gridKey(currentPosition, tileSize));
+
+    for (let i = 0; i < clampedCount; i++) {
+      const tileTypeOptions = this.getTileOptions(i);
+      const selectedType = tileTypeOptions.find((option) => {
+        const candidateDirection = this.rotateDirection(direction, option);
+        const candidateNext = currentPosition.add(this.directionToStep(candidateDirection, tileSize));
+        return !occupiedCells.has(this.gridKey(candidateNext, tileSize));
+      }) ?? 'straight';
+
+      const outgoingDirection = this.rotateDirection(direction, selectedType);
+
+      tiles.push({
+        index: i,
+        type: selectedType,
+        position: currentPosition.clone(),
+        rotationY: this.getTileRotation(selectedType, direction),
+        incomingDirection: direction,
+        travelDirection: outgoingDirection,
+      });
+
+      direction = outgoingDirection;
+      const step = this.directionToStep(direction, tileSize);
+      currentPosition = currentPosition.add(step);
+      occupiedCells.add(this.gridKey(currentPosition, tileSize));
+    }
+
+    return tiles;
+  }
+
+  public buildPortalSpawnsFromTiles(tiles: RouteTile[], everyNTiles: number): PortalSpawn[] {
+    const interval = Math.max(1, everyNTiles);
+    const spawns: PortalSpawn[] = [];
+
+    let templateIndex = 0;
+    for (let i = interval - 1; i < tiles.length; i += interval) {
+      const tile = tiles[i];
+      const template = this.portalTemplates[templateIndex % this.portalTemplates.length];
+      const side = templateIndex % 2 === 0 ? -1 : 1;
+      const offset = this.getRightVector(tile.travelDirection).scale(side * 3.2);
+
+      spawns.push({
+        position: tile.position.add(offset),
+        url: template.url,
+        label: template.label,
+        excerpt: template.excerpt,
+        color: template.color.clone(),
+      });
+
+      templateIndex += 1;
+    }
+
+    this.portalSpawns = spawns;
+    return this.getPortalSpawns();
+  }
 
   public createPortals(scene: Scene): Portal[] {
     this.portals = [];
@@ -73,10 +157,30 @@ export class PortalService {
   }
 
   public getRouteBounds(padding: number = 10): { minZ: number; maxZ: number } {
+    if (this.portalSpawns.length === 0) {
+      return { minZ: -padding, maxZ: padding };
+    }
+
     const zValues = this.portalSpawns.map((spawn) => spawn.position.z);
     const minZ = Math.min(...zValues) - padding;
     const maxZ = Math.max(...zValues) + padding;
     return { minZ, maxZ };
+  }
+
+  public getRouteBoundsFromTiles(tiles: RouteTile[], padding: number = 12): { minX: number; maxX: number; minZ: number; maxZ: number } {
+    if (tiles.length === 0) {
+      return { minX: -padding, maxX: padding, minZ: -padding, maxZ: padding };
+    }
+
+    const xValues = tiles.map((tile) => tile.position.x);
+    const zValues = tiles.map((tile) => tile.position.z);
+
+    return {
+      minX: Math.min(...xValues) - padding,
+      maxX: Math.max(...xValues) + padding,
+      minZ: Math.min(...zValues) - padding,
+      maxZ: Math.max(...zValues) + padding,
+    };
   }
 
   public getPortals(): Portal[] {
@@ -267,6 +371,81 @@ export class PortalService {
 
   private clampNumber(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value));
+  }
+
+  private getTileOptions(index: number): TileType[] {
+    if (index < 3) {
+      return ['straight', 'left', 'right'];
+    }
+
+    const roll = Math.random();
+    if (roll < 0.58) {
+      return ['straight', 'left', 'right'];
+    }
+
+    if (roll < 0.79) {
+      return ['left', 'straight', 'right'];
+    }
+
+    return ['right', 'straight', 'left'];
+  }
+
+  private rotateDirection(direction: RouteDirection, tileType: TileType): RouteDirection {
+    if (tileType === 'left') {
+      return ((direction + 3) % 4) as RouteDirection;
+    }
+
+    if (tileType === 'right') {
+      return ((direction + 1) % 4) as RouteDirection;
+    }
+
+    return direction;
+  }
+
+  private getTileRotation(type: TileType, incomingDirection: RouteDirection): number {
+    const rightAngle = Math.PI / 2;
+
+    if (type === 'straight') {
+      return incomingDirection % 2 === 0 ? 0 : rightAngle;
+    }
+
+    if (type === 'left') {
+      return incomingDirection * rightAngle;
+    }
+
+    return incomingDirection * rightAngle;
+  }
+
+  private gridKey(position: Vector3, tileSize: number): string {
+    const cellX = Math.round(position.x / tileSize);
+    const cellZ = Math.round(position.z / tileSize);
+    return `${cellX}:${cellZ}`;
+  }
+
+  private directionToStep(direction: RouteDirection, tileSize: number): Vector3 {
+    switch (direction) {
+      case 0:
+        return new Vector3(0, 0, -tileSize);
+      case 1:
+        return new Vector3(tileSize, 0, 0);
+      case 2:
+        return new Vector3(0, 0, tileSize);
+      default:
+        return new Vector3(-tileSize, 0, 0);
+    }
+  }
+
+  private getRightVector(direction: RouteDirection): Vector3 {
+    switch (direction) {
+      case 0:
+        return new Vector3(1, 0, 0);
+      case 1:
+        return new Vector3(0, 0, 1);
+      case 2:
+        return new Vector3(-1, 0, 0);
+      default:
+        return new Vector3(0, 0, -1);
+    }
   }
 
   public dispose(): void {

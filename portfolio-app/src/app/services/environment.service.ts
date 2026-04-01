@@ -1,11 +1,114 @@
 import { Injectable } from '@angular/core';
 import { Color3, HemisphericLight, Mesh, MeshBuilder, Scene, StandardMaterial, Vector3 } from '@babylonjs/core';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+import { RouteTile } from './portal.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class EnvironmentService {
+  public createTileRoute(scene: Scene, tiles: RouteTile[], tileSize: number): void {
+    if (tiles.length === 0) {
+      return;
+    }
+
+    // Slight overlap avoids tiny seams between adjacent tiles.
+    const connectedTileSize = tileSize * 1.04;
+    const laneMarkerWidth = 0.3;
+
+    const tileMaterial = new StandardMaterial('tileRouteMat', scene);
+    tileMaterial.diffuseColor = new Color3(0.24, 0.3, 0.24);
+    tileMaterial.specularColor = new Color3(0.05, 0.05, 0.05);
+
+    const markerMaterial = new StandardMaterial('tilePortalMarkerMat', scene);
+    markerMaterial.diffuseColor = new Color3(0.86, 0.86, 0.52);
+    markerMaterial.emissiveColor = new Color3(0.22, 0.2, 0.05);
+
+    tiles.forEach((tile) => {
+      const tileMesh = MeshBuilder.CreateGround(
+        `routeTile_${tile.index}`,
+        { width: connectedTileSize, height: connectedTileSize, subdivisions: 1 },
+        scene
+      );
+
+      tileMesh.position.set(tile.position.x, 0.05, tile.position.z);
+      tileMesh.rotation.y = tile.rotationY;
+      tileMesh.material = tileMaterial;
+
+      this.createTileLaneMarker(scene, tile, connectedTileSize, markerMaterial, laneMarkerWidth);
+    });
+  }
+
+  private createTileLaneMarker(
+    scene: Scene,
+    tile: RouteTile,
+    tileSize: number,
+    markerMaterial: StandardMaterial,
+    markerWidth: number
+  ): void {
+    const inVec = this.directionVector(tile.incomingDirection);
+    const outVec = this.directionVector(tile.travelDirection);
+    const half = tileSize * 0.5;
+
+    if (tile.type === 'straight') {
+      const start = tile.position.subtract(inVec.scale(half));
+      const end = tile.position.add(outVec.scale(half));
+      const straightPath = [
+        start.add(new Vector3(0, 0.09, 0)),
+        end.add(new Vector3(0, 0.09, 0)),
+      ];
+      const laneMarker = MeshBuilder.CreateTube(
+        `routeTileLane_${tile.index}`,
+        { path: straightPath, radius: markerWidth * 0.5, tessellation: 12, cap: Mesh.CAP_ALL },
+        scene
+      );
+      laneMarker.material = markerMaterial;
+      return;
+    }
+
+    const right = new Vector3(-inVec.z, 0, inVec.x);
+    const turnSide = tile.type === 'right' ? 1 : -1;
+    const center = tile.position.add(right.scale(turnSide * half)).subtract(inVec.scale(half));
+    const start = tile.position.subtract(inVec.scale(half));
+    const end = tile.position.add(outVec.scale(half));
+
+    const startRadiusVector = start.subtract(center);
+    const endRadiusVector = end.subtract(center);
+    const startLength = Math.max(0.0001, Math.sqrt(startRadiusVector.x * startRadiusVector.x + startRadiusVector.z * startRadiusVector.z));
+    const endLength = Math.max(0.0001, Math.sqrt(endRadiusVector.x * endRadiusVector.x + endRadiusVector.z * endRadiusVector.z));
+    const startDir = startRadiusVector.scale(1 / startLength);
+    const endDir = endRadiusVector.scale(1 / endLength);
+
+    const points: Vector3[] = [];
+    const steps = 14;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const angle = t * (Math.PI / 2);
+      const dir = startDir.scale(Math.cos(angle)).add(endDir.scale(Math.sin(angle)));
+      points.push(center.add(dir.scale(half)).add(new Vector3(0, 0.09, 0)));
+    }
+
+    const laneCurve = MeshBuilder.CreateTube(
+      `routeTileLane_${tile.index}`,
+      { path: points, radius: markerWidth * 0.5, tessellation: 12, cap: Mesh.CAP_ALL },
+      scene
+    );
+    laneCurve.material = markerMaterial;
+  }
+
+  private directionVector(direction: number): Vector3 {
+    switch (direction) {
+      case 0:
+        return new Vector3(0, 0, -1);
+      case 1:
+        return new Vector3(1, 0, 0);
+      case 2:
+        return new Vector3(0, 0, 1);
+      default:
+        return new Vector3(-1, 0, 0);
+    }
+  }
+
   public createTerrain(scene: Scene): Mesh {
     const light = new HemisphericLight('hemi', new Vector3(0, 1, 0), scene);
     light.intensity = 1.0;
