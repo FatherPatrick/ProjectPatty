@@ -233,6 +233,12 @@ export class EnvironmentService {
 
   public setSkyColor(scene: Scene): void {
     scene.clearColor.set(0.5, 0.7, 0.95, 1);
+
+    // Add distance fog so far-off sections fade and the world feels less fully visible.
+    scene.fogMode = Scene.FOGMODE_LINEAR;
+    scene.fogColor = new Color3(0.5, 0.7, 0.95);
+    scene.fogStart = 22;
+    scene.fogEnd = 115;
   }
 
   public createSidePathWithSign(scene: Scene): void {
