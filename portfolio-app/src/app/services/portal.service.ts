@@ -1,9 +1,6 @@
 import { Injectable } from '@angular/core';
 import { AbstractMesh, Color3, DynamicTexture, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, Vector3 } from '@babylonjs/core';
-
-export type TileType = 'straight' | 'left' | 'right';
-
-type RouteDirection = 0 | 1 | 2 | 3;
+import { RouteTile } from './route.service';
 
 interface PortalTemplate {
   url: string;
@@ -16,15 +13,6 @@ export interface Portal {
   mesh: Mesh;
   url: string;
   label: string;
-}
-
-export interface RouteTile {
-  index: number;
-  type: TileType;
-  position: Vector3;
-  rotationY: number;
-  incomingDirection: RouteDirection;
-  travelDirection: RouteDirection;
 }
 
 export interface PortalSpawn {
@@ -53,49 +41,6 @@ export class PortalService {
     { url: 'https://tarkovle.vercel.app/', label: 'Tarkovle', excerpt: 'Wordle style game, but for Tarkov', color: new Color3(1, 0.5, 0.2) },
     { url: 'https://tarkovle.vercel.app/contact', label: 'Contact', excerpt: 'Reach out for collaboration or consulting.', color: new Color3(1, 0.2, 0.8) },
   ];
-
-  public generateRouteTiles(tileCount: number, tileSize: number, startPosition: Vector3 = new Vector3(0, 0, 50)): RouteTile[] {
-    const clampedCount = Math.max(8, tileCount);
-    const tiles: RouteTile[] = [];
-    let direction: RouteDirection = 0;
-    let currentPosition = startPosition.clone();
-    let previousTileType: TileType | undefined;
-    const occupiedCells = new Set<string>();
-
-    occupiedCells.add(this.gridKey(currentPosition, tileSize));
-
-    for (let i = 0; i < clampedCount; i++) {
-      const tileTypeOptions = this.getTileOptions(i, previousTileType);
-      const selectedType = tileTypeOptions.find((option) => {
-        const candidateDirection = this.rotateDirection(direction, option);
-        if (this.isPositiveZDirection(candidateDirection)) {
-          return false;
-        }
-
-        const candidateNext = currentPosition.add(this.directionToStep(candidateDirection, tileSize));
-        return !occupiedCells.has(this.gridKey(candidateNext, tileSize));
-      }) ?? tileTypeOptions.find((option) => !this.isPositiveZDirection(this.rotateDirection(direction, option))) ?? 'left';
-
-      const outgoingDirection = this.rotateDirection(direction, selectedType);
-
-      tiles.push({
-        index: i,
-        type: selectedType,
-        position: currentPosition.clone(),
-        rotationY: this.getTileRotation(selectedType, direction),
-        incomingDirection: direction,
-        travelDirection: outgoingDirection,
-      });
-
-      direction = outgoingDirection;
-      previousTileType = selectedType;
-      const step = this.directionToStep(direction, tileSize);
-      currentPosition = currentPosition.add(step);
-      occupiedCells.add(this.gridKey(currentPosition, tileSize));
-    }
-
-    return tiles;
-  }
 
   public buildPortalSpawnsFromTiles(tiles: RouteTile[], everyNTiles: number): PortalSpawn[] {
     const interval = Math.max(1, everyNTiles);
@@ -160,33 +105,6 @@ export class PortalService {
       position: spawn.position.clone(),
       color: spawn.color.clone(),
     }));
-  }
-
-  public getRouteBounds(padding: number = 10): { minZ: number; maxZ: number } {
-    if (this.portalSpawns.length === 0) {
-      return { minZ: -padding, maxZ: padding };
-    }
-
-    const zValues = this.portalSpawns.map((spawn) => spawn.position.z);
-    const minZ = Math.min(...zValues) - padding;
-    const maxZ = Math.max(...zValues) + padding;
-    return { minZ, maxZ };
-  }
-
-  public getRouteBoundsFromTiles(tiles: RouteTile[], padding: number = 12): { minX: number; maxX: number; minZ: number; maxZ: number } {
-    if (tiles.length === 0) {
-      return { minX: -padding, maxX: padding, minZ: -padding, maxZ: padding };
-    }
-
-    const xValues = tiles.map((tile) => tile.position.x);
-    const zValues = tiles.map((tile) => tile.position.z);
-
-    return {
-      minX: Math.min(...xValues) - padding,
-      maxX: Math.max(...xValues) + padding,
-      minZ: Math.min(...zValues) - padding,
-      maxZ: Math.max(...zValues) + padding,
-    };
   }
 
   public getPortals(): Portal[] {
@@ -379,95 +297,13 @@ export class PortalService {
     return Math.max(min, Math.min(max, value));
   }
 
-  private getTileOptions(index: number, previousTileType?: TileType): TileType[] {
-    const removeConsecutiveSameTurn = (options: TileType[]): TileType[] => {
-      if (previousTileType === 'left') {
-        return options.filter((option) => option !== 'left');
-      }
-
-      if (previousTileType === 'right') {
-        return options.filter((option) => option !== 'right');
-      }
-
-      return options;
-    };
-
-    if (index < 3) {
-      return removeConsecutiveSameTurn(['straight', 'left', 'right']);
-    }
-
-    const roll = Math.random();
-    if (roll < 0.58) {
-      return removeConsecutiveSameTurn(['straight', 'left', 'right']);
-    }
-
-    if (roll < 0.79) {
-      return removeConsecutiveSameTurn(['left', 'straight', 'right']);
-    }
-
-    return removeConsecutiveSameTurn(['right', 'straight', 'left']);
-  }
-
-  private rotateDirection(direction: RouteDirection, tileType: TileType): RouteDirection {
-    if (tileType === 'left') {
-      return ((direction + 3) % 4) as RouteDirection;
-    }
-
-    if (tileType === 'right') {
-      return ((direction + 1) % 4) as RouteDirection;
-    }
-
-    return direction;
-  }
-
-  private getTileRotation(type: TileType, incomingDirection: RouteDirection): number {
-    const rightAngle = Math.PI / 2;
-
-    if (type === 'straight') {
-      return incomingDirection % 2 === 0 ? 0 : rightAngle;
-    }
-
-    if (type === 'left') {
-      return incomingDirection * rightAngle;
-    }
-
-    return incomingDirection * rightAngle;
-  }
-
-  private gridKey(position: Vector3, tileSize: number): string {
-    const cellX = Math.round(position.x / tileSize);
-    const cellZ = Math.round(position.z / tileSize);
-    return `${cellX}:${cellZ}`;
-  }
-
-  private directionToStep(direction: RouteDirection, tileSize: number): Vector3 {
+  private getRightVector(direction: number): Vector3 {
     switch (direction) {
-      case 0:
-        return new Vector3(0, 0, -tileSize);
-      case 1:
-        return new Vector3(tileSize, 0, 0);
-      case 2:
-        return new Vector3(0, 0, tileSize);
-      default:
-        return new Vector3(-tileSize, 0, 0);
+      case 0: return new Vector3(1, 0, 0);
+      case 1: return new Vector3(0, 0, 1);
+      case 2: return new Vector3(-1, 0, 0);
+      default: return new Vector3(0, 0, -1);
     }
-  }
-
-  private getRightVector(direction: RouteDirection): Vector3 {
-    switch (direction) {
-      case 0:
-        return new Vector3(1, 0, 0);
-      case 1:
-        return new Vector3(0, 0, 1);
-      case 2:
-        return new Vector3(-1, 0, 0);
-      default:
-        return new Vector3(0, 0, -1);
-    }
-  }
-
-  private isPositiveZDirection(direction: RouteDirection): boolean {
-    return direction === 2;
   }
 
   public dispose(): void {

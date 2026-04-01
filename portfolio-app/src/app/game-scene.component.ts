@@ -4,7 +4,9 @@ import { Mesh } from '@babylonjs/core';
 import { EnvironmentService } from './services/environment.service';
 import { InputService } from './services/input.service';
 import { PlayerService } from './services/player.service';
-import { PortalService, RouteTile } from './services/portal.service';
+import { PortalService } from './services/portal.service';
+import { RouteRendererService } from './services/route-renderer.service';
+import { RouteService } from './services/route.service';
 import { SceneService } from './services/scene.service';
 
 @Component({
@@ -19,7 +21,6 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
 
   private player?: Mesh;
   private portals: any[] = [];
-  private routeTiles: RouteTile[] = [];
   private lastTouchedPortal: any = null;
   private readonly tileSize = 8;
   private readonly tileCount = 30;
@@ -38,7 +39,9 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
     private readonly environmentService: EnvironmentService,
     private readonly playerService: PlayerService,
     private readonly inputService: InputService,
-    private readonly portalService: PortalService
+    private readonly portalService: PortalService,
+    private readonly routeService: RouteService,
+    private readonly routeRendererService: RouteRendererService
   ) {}
 
   public ngAfterViewInit(): void {
@@ -53,13 +56,13 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
     this.environmentService.createRocks(scene);
     this.environmentService.createSidePathWithSign(scene);
 
-    this.routeTiles = this.portalService.generateRouteTiles(this.tileCount, this.tileSize);
-    this.environmentService.createTileRoute(scene, this.routeTiles, this.tileSize);
-    const lastTile = this.routeTiles[this.routeTiles.length - 1];
+    const tiles = this.routeService.generateRouteTiles(this.tileCount, this.tileSize);
+    this.routeRendererService.createTileRoute(scene, tiles, this.tileSize);
+    const lastTile = tiles[tiles.length - 1];
     if (lastTile) {
-      this.environmentService.createEndMarker(scene, lastTile, this.tileSize);
+      this.routeRendererService.createEndMarker(scene, lastTile, this.tileSize);
     }
-    this.portalService.buildPortalSpawnsFromTiles(this.routeTiles, this.portalEveryNTiles);
+    this.portalService.buildPortalSpawnsFromTiles(tiles, this.portalEveryNTiles);
 
     this.portals = this.portalService.createPortals(scene);
 
@@ -74,7 +77,7 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
         this.playerService.updatePlayerMovement(this.player, forward, right);
         this.playerService.handleJumpInput(this.player, jumpPressed, forward, right);
 
-        this.constrainPlayerToPath(this.player);
+        this.routeService.constrainPlayerToPath(this.player, this.tileSize);
 
         this.updateDebugPosition(this.player);
 
@@ -116,67 +119,6 @@ export class GameSceneComponent implements AfterViewInit, OnDestroy {
   private readonly onResize = (): void => {
     this.sceneService.handleResize();
   };
-
-  private clamp(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value));
-  }
-
-  private constrainPlayerToPath(player: Mesh): void {
-    if (this.routeTiles.length === 0) {
-      return;
-    }
-
-    const point = { x: player.position.x, z: player.position.z };
-    const tileHalfSize = this.tileSize * 1.04 * 0.5;
-    let bestPoint = point;
-    let bestDistanceSq = Number.POSITIVE_INFINITY;
-
-    for (const tile of this.routeTiles) {
-      const nearest = this.closestPointOnTile(point, tile, tileHalfSize);
-      if (nearest.isInside) {
-        return;
-      }
-
-      if (nearest.distanceSq < bestDistanceSq) {
-        bestDistanceSq = nearest.distanceSq;
-        bestPoint = nearest.point;
-      }
-    }
-
-    player.position.x = bestPoint.x;
-    player.position.z = bestPoint.z;
-  }
-
-  private closestPointOnTile(
-    point: { x: number; z: number },
-    tile: RouteTile,
-    tileHalfSize: number
-  ): { point: { x: number; z: number }; distanceSq: number; isInside: boolean } {
-    const dx = point.x - tile.position.x;
-    const dz = point.z - tile.position.z;
-    const cos = Math.cos(tile.rotationY);
-    const sin = Math.sin(tile.rotationY);
-
-    // Rotate into tile-local space.
-    const localX = dx * cos + dz * sin;
-    const localZ = -dx * sin + dz * cos;
-
-    const clampedX = this.clamp(localX, -tileHalfSize, tileHalfSize);
-    const clampedZ = this.clamp(localZ, -tileHalfSize, tileHalfSize);
-    const isInside = localX === clampedX && localZ === clampedZ;
-
-    // Rotate clamped local point back to world space.
-    const worldX = tile.position.x + clampedX * cos - clampedZ * sin;
-    const worldZ = tile.position.z + clampedX * sin + clampedZ * cos;
-    const ddx = point.x - worldX;
-    const ddz = point.z - worldZ;
-
-    return {
-      point: { x: worldX, z: worldZ },
-      distanceSq: ddx * ddx + ddz * ddz,
-      isInside,
-    };
-  }
 
   private updateDebugPosition(player: Mesh, force: boolean = false): void {
     const now = performance.now();
